@@ -7,16 +7,15 @@ from data_loader import get_data_loaders
 import time
 import os
 
-# --- YENİ AYARLAR ---
-EPOCHS = 50            # 3'ten 50'ye çıkardık. (Daha gerçekçi yaşlanma için şart)
+# --- AYARLAR ---
+EPOCHS = 50            
 LR = 0.0002            
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Kullanılan Cihaz: {DEVICE}") # Ekranda 'cuda' yazmalı
 MODEL_PATH = "models/yaslandirma_gan.pth"
 
 def train_gan():
     print(f"🚀 GAN (Ressam) Eğitimi Başlıyor... Hedef: {EPOCHS} Epoch")
-    print("⚠️ Bu işlem uzun sürebilir (Örn: Sabaha kadar bırakabilirsiniz).")
+    print(f"⚙️ Cihaz: {DEVICE}")
     
     # 1. Veri Yükleyici
     train_loader, _ = get_data_loaders()
@@ -25,13 +24,18 @@ def train_gan():
     generator = Generator().to(DEVICE)
     discriminator = Discriminator().to(DEVICE)
     
-    # Eğer önceden eğitilmiş model varsa onu yükle, sıfırdan başlama
+    # Kaldığı yerden devam etme kontrolü
+    start_epoch = 0
     if os.path.exists(MODEL_PATH):
         try:
-            generator.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
-            print("✅ Önceki eğitimden devam ediliyor...")
+            # Dosya bozuk mu diye kontrol et (Boyutu 0 ise sil)
+            if os.path.getsize(MODEL_PATH) > 0:
+                generator.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+                print("✅ Önceki eğitimden devam ediliyor...")
+            else:
+                print("⚠️ Model dosyası bozuk (0 byte), sıfırdan başlanıyor.")
         except:
-            print("⚠️ Eski model yüklenemedi, sıfırdan başlanıyor.")
+            print("⚠️ Eski model yüklenirken hata oluştu, sıfırdan başlanıyor.")
 
     # 3. Ayarlar
     criterion_GAN = nn.MSELoss()
@@ -41,15 +45,14 @@ def train_gan():
     optimizer_D = optim.Adam(discriminator.parameters(), lr=LR, betas=(0.5, 0.999))
 
     # --- EĞİTİM DÖNGÜSÜ ---
-    for epoch in range(EPOCHS):
+    for epoch in range(start_epoch, EPOCHS):
         start_time = time.time()
         
         for i, (imgs, ages) in enumerate(train_loader):
             
             real_imgs = imgs.to(DEVICE)
-            # 40 yaş altı genç (0), üstü yaşlı (1)
             real_age_labels = (ages >= 40).float().view(-1, 1).to(DEVICE)
-            target_age_labels = 1 - real_age_labels # Tam tersine dönüştür
+            target_age_labels = 1 - real_age_labels 
 
             # --- A) GENERATOR ---
             optimizer_G.zero_grad()
@@ -57,10 +60,9 @@ def train_gan():
             pred_fake = discriminator(fake_imgs, target_age_labels)
             valid = torch.ones_like(pred_fake, requires_grad=False).to(DEVICE)
             
-            # Kayıp: Gerçekçilik + Piksel Benzerliği
             loss_GAN = criterion_GAN(pred_fake, valid)
             loss_pixel = criterion_pixel(fake_imgs, real_imgs)
-            loss_G = loss_GAN + (100 * loss_pixel) # 100 katsayısı yüzün kimliğini korur
+            loss_G = loss_GAN + (100 * loss_pixel) 
             
             loss_G.backward()
             optimizer_G.step()
@@ -76,13 +78,17 @@ def train_gan():
             loss_D.backward()
             optimizer_D.step()
 
-            if i % 10 == 0:
+            if i % 50 == 0: # Logları biraz azalttık
                 print(f"[Epoch {epoch+1}/{EPOCHS}] [Adım {i}] G_Loss: {loss_G.item():.4f}")
 
-        # Her epoch sonu kaydet
+        # Her epoch sonu GÜVENLİ KAYIT
         duration = time.time() - start_time
         print(f"✅ Epoch {epoch+1} Bitti ({duration:.0f}sn). Model Kaydediliyor...")
-        torch.save(generator.state_dict(), MODEL_PATH)
+        
+        try:
+            torch.save(generator.state_dict(), MODEL_PATH)
+        except Exception as e:
+            print(f"⚠️ DİKKAT: Model kaydedilemedi (OneDrive sorunu olabilir). Eğitim devam ediyor... Hata: {e}")
 
     print("🎉 Büyük Eğitim Tamamlandı!")
 

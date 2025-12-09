@@ -1,0 +1,12 @@
+# Python
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Modeller (Çok büyükse GitHub hata verir, şimdilik dursun ama uyarı alabiliriz)
+# backend/models/*.pth
+
+# React
+frontend/node_modules/
+frontend/build/
+.DS_Store

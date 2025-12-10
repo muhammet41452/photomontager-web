@@ -9,7 +9,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
-  // Dosya seçilince çalışır
+  // SİZİN BACKEND ADRESİNİZ (Sonunda / işareti yok)
+  const BACKEND_URL = "https://photomontager-web.onrender.com";
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -21,21 +23,21 @@ function App() {
     }
   };
 
-  // Butonlara basılınca çalışır
   const handleProcess = async (mode) => {
     if (!selectedFile) return;
     
     setLoading(true);
-    setStatus('Yapay Zeka İşliyor...');
+    setStatus('Yapay Zeka İşliyor... (İlk işlem 1-2 dk sürebilir)');
     setResultImage(null);
     setResultAge(null);
 
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('target_mode', mode); // Backend'e ne yapacağını söylüyoruz
+    formData.append('target_mode', mode);
 
     try {
-      const response = await fetch('https://photomontager-web.onrender.com/analyze/', {
+      // 1. Backend'e İstek At
+      const response = await fetch(`${BACKEND_URL}/analyze/`, {
         method: 'POST',
         body: formData,
       });
@@ -43,22 +45,27 @@ function App() {
       const data = await response.json();
 
       if (data.error) {
-        setStatus('Hata oluştu: ' + data.error);
+        setStatus('Hata: ' + data.error);
       } else {
+        // 2. Gelen Resim Adresini Düzelt (Tam URL Yap)
+        // Eğer gelen adres http ile başlamıyorsa, başına backend adresini ekle
+        let fullImageUrl = data.image_url;
+        if (!fullImageUrl.startsWith('http')) {
+            fullImageUrl = `${BACKEND_URL}${data.image_url}`;
+        }
+
         if (data.type === 'prediction') {
-          // Yaş Tahmini Sonucu
           setResultAge(data.age);
-          setResultImage(data.image_url); // Algılanan yüzü göster
+          setResultImage(fullImageUrl);
           setStatus(`Tahmin Edilen Yaş: ${data.age}`);
         } else {
-          // Yaşlandırma/Gençleştirme Sonucu
-          setResultImage(data.image_url);
+          setResultImage(fullImageUrl);
           setStatus(mode === 'make_old' ? 'Yaşlandırma Tamamlandı!' : 'Gençleştirme Tamamlandı!');
         }
       }
     } catch (error) {
       console.error(error);
-      setStatus('Sunucuya bağlanılamadı. Backend açık mı?');
+      setStatus('Sunucuya bağlanılamadı. (Sunucu uyanıyor olabilir, tekrar deneyin)');
     }
     setLoading(false);
   };
@@ -68,7 +75,6 @@ function App() {
       <header className="App-header">
         <h1>Yapay Zeka Fotoğraf Stüdyosu</h1>
         
-        {/* Yükleme Alanı */}
         <div className="upload-container">
           <input 
             type="file" 
@@ -82,14 +88,12 @@ function App() {
           </label>
         </div>
 
-        {/* Ana İçerik */}
         <div className="main-content">
-          
           {/* Sol: Orijinal */}
           {previewUrl && (
             <div className="image-box">
               <h3>Orijinal</h3>
-              <img src={previewUrl} alt="Seçilen" className="img-display" />
+              <img src={previewUrl} alt="Orijinal" className="img-display" />
               
               <div className="button-group">
                 <button onClick={() => handleProcess('age_estimation')} disabled={loading} className="action-btn predict-btn">
@@ -109,7 +113,8 @@ function App() {
           {resultImage && (
             <div className="image-box result-box">
               <h3>Sonuç</h3>
-              <img src={resultImage} alt="Sonuç" className="img-display" />
+              {/* key={resultImage} ekleyerek resim değiştiğinde yeniden yüklenmesini sağlıyoruz */}
+              <img key={resultImage} src={resultImage} alt="Sonuç" className="img-display" />
               
               {resultAge !== null && (
                 <div className="age-result">
@@ -120,7 +125,6 @@ function App() {
           )}
         </div>
 
-        {/* Durum Mesajı */}
         <p className="status-text">{status}</p>
 
       </header>

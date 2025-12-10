@@ -204,7 +204,8 @@ async def analyze_photo(
         save_path = os.path.join(UPLOAD_DIRECTORY, out_filename)
         cv2.imwrite(save_path, final_output)
         
-        result["image_url"] = f"http://localhost:8000/uploaded_images/{out_filename}"
+        # Başındaki localhost'u siliyoruz, sadece dosya yolunu veriyoruz
+        result["image_url"] = f"/uploaded_images/{out_filename}"
         result["message"] = "İşlem Başarılı"
         
         return result

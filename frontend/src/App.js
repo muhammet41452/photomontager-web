@@ -9,9 +9,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
-  // SİZİN BACKEND ADRESİNİZ (Sonunda / işareti yok)
+  // --- AYARLAR ---
+  // Eğer lokalde çalışıyorsanız burayı açın:
+  // const BACKEND_URL = "http://localhost:8000"; 
+  // Eğer canlı sunucu kullanıyorsanız (Render):
   const BACKEND_URL = "https://photomontager-web.onrender.com";
 
+  // --- DOSYA SEÇME ---
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -23,11 +27,12 @@ function App() {
     }
   };
 
+  // --- İŞLEME FONKSİYONU ---
   const handleProcess = async (mode) => {
     if (!selectedFile) return;
     
     setLoading(true);
-    setStatus('Yapay Zeka İşliyor... (İlk işlem 1-2 dk sürebilir)');
+    setStatus('Yapay Zeka İşliyor...');
     setResultImage(null);
     setResultAge(null);
 
@@ -36,7 +41,6 @@ function App() {
     formData.append('target_mode', mode);
 
     try {
-      // 1. Backend'e İstek At
       const response = await fetch(`${BACKEND_URL}/analyze/`, {
         method: 'POST',
         body: formData,
@@ -47,8 +51,7 @@ function App() {
       if (data.error) {
         setStatus('Hata: ' + data.error);
       } else {
-        // 2. Gelen Resim Adresini Düzelt (Tam URL Yap)
-        // Eğer gelen adres http ile başlamıyorsa, başına backend adresini ekle
+        // URL Düzeltme
         let fullImageUrl = data.image_url;
         if (!fullImageUrl.startsWith('http')) {
             fullImageUrl = `${BACKEND_URL}${data.image_url}`;
@@ -65,9 +68,49 @@ function App() {
       }
     } catch (error) {
       console.error(error);
-      setStatus('Sunucuya bağlanılamadı. (Sunucu uyanıyor olabilir, tekrar deneyin)');
+      setStatus('Sunucuya bağlanılamadı.');
     }
     setLoading(false);
+  };
+
+  // --- YENİ ÖZELLİK: Sonucu İndirme ---
+  const handleDownload = () => {
+    if (resultImage) {
+      const link = document.createElement('a');
+      link.href = resultImage;
+      link.download = `sonuc_${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // --- YENİ ÖZELLİK: Sonucu Orijinal Yapma ---
+  const handleSetAsOriginal = async () => {
+    if (!resultImage) return;
+
+    try {
+      setStatus('Resim aktarılıyor...');
+      // 1. Resim URL'sini alıp Blob (Veri yığını) haline getiriyoruz
+      const response = await fetch(resultImage);
+      const blob = await response.blob();
+      
+      // 2. Blob'dan yeni bir Dosya oluşturuyoruz
+      const file = new File([blob], "islenmis_resim.jpg", { type: "image/jpeg" });
+
+      // 3. State'leri güncelliyoruz
+      setSelectedFile(file);
+      setPreviewUrl(resultImage); // Artık orijinal kısımda bu resim görünecek
+      
+      // Sağ tarafı temizle
+      setResultImage(null);
+      setResultAge(null);
+      setStatus('İşlenmiş fotoğraf yeni orijinal olarak ayarlandı. Tekrar işlem yapabilirsiniz.');
+
+    } catch (error) {
+      console.error("Dönüştürme hatası:", error);
+      setStatus("Resim aktarılırken hata oluştu.");
+    }
   };
 
   return (
@@ -76,20 +119,13 @@ function App() {
         <h1>Yapay Zeka Fotoğraf Stüdyosu</h1>
         
         <div className="upload-container">
-          <input 
-            type="file" 
-            accept="image/*" 
-            onChange={handleFileChange} 
-            id="fileInput" 
-            style={{ display: 'none' }} 
-          />
-          <label htmlFor="fileInput" className="upload-btn">
-            📷 Fotoğraf Yükle
-          </label>
+          <input type="file" accept="image/*" onChange={handleFileChange} id="fileInput" style={{ display: 'none' }} />
+          <label htmlFor="fileInput" className="upload-btn">📷 Fotoğraf Yükle</label>
         </div>
 
         <div className="main-content">
-          {/* Sol: Orijinal */}
+          
+          {/* SOL KUTU: GİRİŞ */}
           {previewUrl && (
             <div className="image-box">
               <h3>Orijinal</h3>
@@ -97,7 +133,7 @@ function App() {
               
               <div className="button-group">
                 <button onClick={() => handleProcess('age_estimation')} disabled={loading} className="action-btn predict-btn">
-                  🔍 Yaş Tahmini
+                  🔍 Yaşı Tahmin Et
                 </button>
                 <button onClick={() => handleProcess('make_old')} disabled={loading} className="action-btn old-btn">
                   👴 Beni Yaşlandır
@@ -109,24 +145,30 @@ function App() {
             </div>
           )}
 
-          {/* Sağ: Sonuç */}
+          {/* SAĞ KUTU: ÇIKIŞ */}
           {resultImage && (
             <div className="image-box result-box">
               <h3>Sonuç</h3>
-              {/* key={resultImage} ekleyerek resim değiştiğinde yeniden yüklenmesini sağlıyoruz */}
               <img key={resultImage} src={resultImage} alt="Sonuç" className="img-display" />
               
               {resultAge !== null && (
-                <div className="age-result">
-                  {resultAge} <span style={{fontSize:'1rem'}}>YAŞ</span>
-                </div>
+                <div className="age-result">{resultAge} <span style={{fontSize:'1rem'}}>YAŞ</span></div>
               )}
+
+              {/* YENİ BUTONLAR */}
+              <div className="button-group" style={{ marginTop: '15px' }}>
+                <button onClick={handleDownload} className="action-btn download-btn">
+                  ⬇️ İndir
+                </button>
+                <button onClick={handleSetAsOriginal} className="action-btn reuse-btn">
+                  u21a9 Bu Resmi Kullan
+                </button>
+              </div>
             </div>
           )}
         </div>
 
         <p className="status-text">{status}</p>
-
       </header>
     </div>
   );

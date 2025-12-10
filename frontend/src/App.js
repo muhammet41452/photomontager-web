@@ -9,10 +9,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
-  // --- AYARLAR ---
-  // Eğer lokalde çalışıyorsanız burayı açın:
-  // const BACKEND_URL = "http://localhost:8000"; 
-  // Eğer canlı sunucu kullanıyorsanız (Render):
+  // SİZİN RENDER ADRESİNİZ
   const BACKEND_URL = "https://photomontager-web.onrender.com";
 
   // --- DOSYA SEÇME ---
@@ -32,7 +29,7 @@ function App() {
     if (!selectedFile) return;
     
     setLoading(true);
-    setStatus('Yapay Zeka İşliyor...');
+    setStatus('Yapay Zeka İşliyor... (1-2 dk sürebilir)');
     setResultImage(null);
     setResultAge(null);
 
@@ -73,39 +70,49 @@ function App() {
     setLoading(false);
   };
 
-  // --- YENİ ÖZELLİK: Sonucu İndirme ---
-  const handleDownload = () => {
+  // --- DÜZELTİLDİ: İndirme Fonksiyonu (Blob Yöntemi) ---
+  const handleDownload = async () => {
     if (resultImage) {
-      const link = document.createElement('a');
-      link.href = resultImage;
-      link.download = `sonuc_${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        setStatus('İndiriliyor...');
+        // Resmi veri olarak çek
+        const response = await fetch(resultImage);
+        const blob = await response.blob();
+        
+        // Geçici bir indirme bağlantısı oluştur
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `sonuc_${Date.now()}.jpg`; // Dosya ismini ayarla
+        document.body.appendChild(link);
+        link.click(); // Otomatik tıkla
+        
+        // Temizlik
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        setStatus('İndirme tamamlandı.');
+      } catch (error) {
+        console.error("İndirme hatası:", error);
+        setStatus("İndirirken hata oluştu.");
+      }
     }
   };
 
-  // --- YENİ ÖZELLİK: Sonucu Orijinal Yapma ---
+  // --- SONUCU ORİJİNAL YAPMA ---
   const handleSetAsOriginal = async () => {
     if (!resultImage) return;
 
     try {
       setStatus('Resim aktarılıyor...');
-      // 1. Resim URL'sini alıp Blob (Veri yığını) haline getiriyoruz
       const response = await fetch(resultImage);
       const blob = await response.blob();
-      
-      // 2. Blob'dan yeni bir Dosya oluşturuyoruz
       const file = new File([blob], "islenmis_resim.jpg", { type: "image/jpeg" });
 
-      // 3. State'leri güncelliyoruz
       setSelectedFile(file);
-      setPreviewUrl(resultImage); // Artık orijinal kısımda bu resim görünecek
-      
-      // Sağ tarafı temizle
+      setPreviewUrl(resultImage);
       setResultImage(null);
       setResultAge(null);
-      setStatus('İşlenmiş fotoğraf yeni orijinal olarak ayarlandı. Tekrar işlem yapabilirsiniz.');
+      setStatus('İşlenmiş fotoğraf yeni orijinal olarak ayarlandı.');
 
     } catch (error) {
       console.error("Dönüştürme hatası:", error);
@@ -125,7 +132,7 @@ function App() {
 
         <div className="main-content">
           
-          {/* SOL KUTU: GİRİŞ */}
+          {/* SOL KUTU */}
           {previewUrl && (
             <div className="image-box">
               <h3>Orijinal</h3>
@@ -145,7 +152,7 @@ function App() {
             </div>
           )}
 
-          {/* SAĞ KUTU: ÇIKIŞ */}
+          {/* SAĞ KUTU */}
           {resultImage && (
             <div className="image-box result-box">
               <h3>Sonuç</h3>
@@ -155,13 +162,13 @@ function App() {
                 <div className="age-result">{resultAge} <span style={{fontSize:'1rem'}}>YAŞ</span></div>
               )}
 
-              {/* YENİ BUTONLAR */}
               <div className="button-group" style={{ marginTop: '15px' }}>
                 <button onClick={handleDownload} className="action-btn download-btn">
                   ⬇️ İndir
                 </button>
+                {/* DÜZELTİLDİ: Unicode karakteri */}
                 <button onClick={handleSetAsOriginal} className="action-btn reuse-btn">
-                  u21a9 Bu Resmi Kullan
+                  ↩ Bu Resmi Kullan
                 </button>
               </div>
             </div>

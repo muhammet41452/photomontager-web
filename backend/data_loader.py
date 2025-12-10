@@ -1,19 +1,20 @@
 import os
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import torch
+import random
 
 # --- AYARLAR ---
-DATA_DIR = "datasets/UTKFace" # Veri setinizin olduğu klasör
-BATCH_SIZE = 32               # Her seferde kaç resim işlensin? (CPU için 32 iyidir)
-IMAGE_SIZE = 128              # Resimlerin küçültüleceği boyut (128x128)
+DATA_DIR = "datasets/UTKFace"
+BATCH_SIZE = 64 # GPU varsa batch size'ı artırabiliriz (daha hızlı olur)
+IMAGE_SIZE = 128
 
 class UTKFaceDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
+    def __init__(self, root_dir, file_list, transform=None):
         self.root_dir = root_dir
         self.transform = transform
-        self.files = [f for f in os.listdir(root_dir) if f.endswith('.jpg')]
+        self.files = file_list
 
     def __len__(self):
         return len(self.files)
@@ -22,61 +23,60 @@ class UTKFaceDataset(Dataset):
         file_name = self.files[idx]
         img_path = os.path.join(self.root_dir, file_name)
         
-        # 1. Resmi Yükle
-        image = Image.open(img_path).convert("RGB")
-        
-        # 2. Etiketi (Yaşı) Dosya Adından Çıkar
-        # Dosya adı formatı: yas_cinsiyet_irk_tarih.jpg
         try:
+            image = Image.open(img_path).convert("RGB")
             age = int(file_name.split('_')[0])
         except:
-            age = 0 # Hatalı dosya ismi varsa 0 kabul et
+            # Hatalı dosya varsa siyah resim ve 0 yaş döndür
+            image = Image.new('RGB', (IMAGE_SIZE, IMAGE_SIZE))
+            age = 0
             
-        # 3. Dönüşümleri Uygula (Tensor'a çevir, boyutlandır vs.)
         if self.transform:
             image = self.transform(image)
             
-        # 4. Yaşı da Tensor formatına çevir (Model sayı istiyor, float32)
         age_tensor = torch.tensor(age, dtype=torch.float32)
-        
         return image, age_tensor
 
 def get_data_loaders():
-    # Resimlere uygulanacak işlemler zinciri
-    transform = transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)), # Boyutu sabitle
-        transforms.ToTensor(),                       # Sayısal matrise çevir (0-1 arası)
-        transforms.Normalize(mean=[0.5, 0.5, 0.5],   # Renkleri dengele
-                             std=[0.5, 0.5, 0.5])
+    # Tüm dosya listesini al
+    all_files = [f for f in os.listdir(DATA_DIR) if f.endswith('.jpg')]
+    
+    # Listeyi karıştır (Her eğitimde farklı sıra olsun)
+    random.shuffle(all_files)
+    
+    # %80 Eğitim, %20 Test olarak ayır
+    split_idx = int(0.8 * len(all_files))
+    train_files = all_files[:split_idx]
+    test_files = all_files[split_idx:]
+
+    # --- EĞİTİM TRANSFORMU (Veri Çoğaltma - Augmentation) ---
+    # Modelin ezberlemesini önlemek için resimleri zorlaştırıyoruz
+    train_transform = transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.RandomHorizontalFlip(p=0.5), # %50 ihtimalle aynala
+        transforms.RandomRotation(15),          # -15 ile +15 derece arası döndür
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2), # Işıkla oyna
+        transforms.ToTensor(),
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
     ])
 
-    # Veri Setini Oluştur
-    dataset = UTKFaceDataset(DATA_DIR, transform=transform)
+    # --- TEST TRANSFORMU (Sade) ---
+    # Test ederken resmi bozmuyoruz, olduğu gibi soruyoruz
+    test_transform = transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+    ])
+
+    # Datasetleri oluştur
+    train_dataset = UTKFaceDataset(DATA_DIR, train_files, transform=train_transform)
+    test_dataset = UTKFaceDataset(DATA_DIR, test_files, transform=test_transform)
     
-    # Eğitim (%80) ve Test (%20) Ayırma
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-    
-    print(f"✅ Veri Seti Hazır: {len(dataset)} toplam resim.")
+    print(f"✅ Veri Seti Hazırlandı (Augmentation Aktif).")
     print(f"   - Eğitim Seti: {len(train_dataset)} resim")
     print(f"   - Test Seti:   {len(test_dataset)} resim")
 
-    # DataLoader'ları (Paketleyicileri) Oluştur
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
     
     return train_loader, test_loader
-
-# --- TEST BLOĞU (Dosyayı doğrudan çalıştırırsan burası çalışır) ---
-if __name__ == "__main__":
-    train_loader, test_loader = get_data_loaders()
-    
-    # İlk paketi (batch) çekip kontrol edelim
-    images, ages = next(iter(train_loader))
-    
-    print("\n--- Örnek Paket Kontrolü ---")
-    print(f"Resim Paketi Boyutu: {images.shape}  -> (Adet, Renk Kanalı, Boy, En)")
-    print(f"Yaş Paketi Boyutu:   {ages.shape}")
-    print(f"İlk 5 Yaş Etiketi:   {ages[:5]}")
-    print("✅ DataLoader başarıyla çalışıyor!")

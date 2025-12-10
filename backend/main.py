@@ -69,13 +69,10 @@ else:
 # --- YARDIMCI FONKSİYONLAR ---
 
 def detect_face_dnn(img_cv):
-    """
-    OpenCV'nin Derin Öğrenme modelini kullanarak yüzü bulur.
-    """
+    """ OpenCV DNN ile yüz bulur """
     if face_net is None: return None
     
     h, w = img_cv.shape[:2]
-    # Resmi 300x300 boyutuna getirip modele veriyoruz
     blob = cv2.dnn.blobFromImage(cv2.resize(img_cv, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
     face_net.setInput(blob)
     detections = face_net.forward()
@@ -85,8 +82,6 @@ def detect_face_dnn(img_cv):
     
     for i in range(0, detections.shape[2]):
         confidence = detections[0, 0, i, 2]
-        
-        # %40'tan fazla eminse yüz kabul et
         if confidence > 0.4:
             box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
             (startX, startY, endX, endY) = box.astype("int")
@@ -111,7 +106,7 @@ def tensor_to_cv2(tensor):
     image = image.clamp(0, 1)
     image = image.permute(1, 2, 0).numpy()
     image = (image * 255).astype(np.uint8)
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) # Renk düzeltme
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) 
     return image
 
 # --- API ENDPOINT ---
@@ -134,10 +129,7 @@ async def analyze_photo(
         if face_rect:
             (x, y, w, h) = face_rect
             
-            # --- DÜZELTME BURADA: Padding'i Azalttık ---
-            # Modelimiz yüzü yakından görmeye alışkın.
-            # Önceden %20 boşluk bırakıyorduk, şimdi %5'e indirdik.
-            # Böylece yüz, resmin tamamını kaplayacak.
+            # Padding (Hassas Kesim için %5)
             p_w = int(w * 0.05) 
             p_h = int(h * 0.05)
             
@@ -147,16 +139,13 @@ async def analyze_photo(
             y2 = min(img_bgr.shape[0], y + h + p_h)
             
             face_roi_bgr = img_bgr[y1:y2, x1:x2]
-            print(f"✅ Yüz Bulundu: {x1},{y1} - {x2},{y2}")
         else:
-            print("⚠️ Yüz Bulunamadı, Merkez Kesiliyor.")
             H, W = img_bgr.shape[:2]
             x1, y1 = int(W*0.25), int(H*0.20)
             x2, y2 = int(W*0.75), int(H*0.80)
             face_roi_bgr = img_bgr[y1:y2, x1:x2]
 
-        # Modele Hazırla (128x128'e Sıkıştır - Resize)
-        # Training verisi resize edildiği için burada da resize (squash) ediyoruz.
+        # Modele Hazırlık
         face_roi_rgb = cv2.cvtColor(face_roi_bgr, cv2.COLOR_BGR2RGB)
         face_pil = Image.fromarray(face_roi_rgb)
         face_input = face_pil.resize((128, 128), Image.Resampling.LANCZOS)
@@ -177,8 +166,8 @@ async def analyze_photo(
             result["type"] = "prediction"
             result["age"] = round(age, 1)
             
-            if face_rect:
-                cv2.rectangle(final_output, (x1, y1), (x2, y2), (0, 255, 0), 3)
+            # Kare çizme kodunu sildik.
+            # final_output olduğu gibi (temiz) kalacak.
 
         # --- B) YAŞLANDIRMA ---
         else:
@@ -204,7 +193,7 @@ async def analyze_photo(
         save_path = os.path.join(UPLOAD_DIRECTORY, out_filename)
         cv2.imwrite(save_path, final_output)
         
-        # Başındaki localhost'u siliyoruz, sadece dosya yolunu veriyoruz
+        # URL Düzeltmesi (Render/Localhost uyumlu)
         result["image_url"] = f"/uploaded_images/{out_filename}"
         result["message"] = "İşlem Başarılı"
         

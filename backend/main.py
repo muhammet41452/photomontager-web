@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import torch
 import torchvision.transforms as transforms
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps
 import io
 import os
 import cv2
@@ -33,7 +33,7 @@ if not os.path.exists(UPLOAD_DIRECTORY):
 app.mount("/uploaded_images", StaticFiles(directory=UPLOAD_DIRECTORY), name="uploaded_images")
 
 # --- MODELLER ---
-DEVICE = torch.device("cpu") # Render'da CPU kullanılır
+DEVICE = torch.device("cpu")
 age_model = AgeEstimationModel()
 gan_model = Generator()
 AGE_PATH = "models/yas_tahmin_modeli.pth"
@@ -51,8 +51,8 @@ try:
 except Exception as e:
     print(f"⚠️ Model Hatası: {e}")
 
-# --- YÜZ AĞI (FACE MESH) KURULUMU ---
-# Bu teknoloji yüzü kare olarak değil, 468 noktalı bir harita olarak görür.
+# --- YÜZ AĞI (FACE MESH) ---
+# Yüzü kare değil, maske olarak çıkarmak için
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(
     static_image_mode=True,
@@ -63,27 +63,9 @@ face_mesh = mp_face_mesh.FaceMesh(
 
 # --- YARDIMCI FONKSİYONLAR ---
 
-def enhance_image(image_cv):
-    """
-    128px'lik resmi büyütürken oluşan bulanıklığı gidermek için
-    Keskinleştirme ve Detay Artırma uygular.
-    """
-    # 1. Detay Artırma (Detail Enhance)
-    # Bu filtre, yüzdeki çizgileri ve dokuyu belirginleştirir.
-    enhanced = cv2.detailEnhance(image_cv, sigma_s=10, sigma_r=0.15)
-    
-    # 2. Keskinleştirme (Sharpening Kernel)
-    # Bulanıklığı almak için agresif bir filtre
-    kernel = np.array([[0, -1, 0], 
-                       [-1, 5,-1], 
-                       [0, -1, 0]])
-    sharpened = cv2.filter2D(enhanced, -1, kernel)
-    
-    return sharpened
-
 def get_face_mask_and_bbox(image_np):
     """
-    Yüzün tam sınırlarını (Maske) ve kare çerçevesini (BBox) çıkarır.
+    Yüzün maskesini (gerçek sınırlarını) ve koordinatlarını çıkarır.
     """
     results = face_mesh.process(image_np)
     
@@ -93,16 +75,15 @@ def get_face_mask_and_bbox(image_np):
     landmarks = results.multi_face_landmarks[0].landmark
     h, w, _ = image_np.shape
     
-    # Yüzdeki tüm noktaları piksel koordinatına çevir
+    # Yüz noktalarını al
     points = np.array([(int(l.x * w), int(l.y * h)) for l in landmarks], np.int32)
     
-    # 1. MASKE OLUŞTUR (Yüzün gerçek sınırları)
-    # Convex Hull: Noktaları saran en dış çemberi bulur
+    # Maske oluştur
     hull = cv2.convexHull(points)
     mask = np.zeros((h, w), dtype=np.uint8)
     cv2.fillConvexPoly(mask, hull, 255)
     
-    # 2. KARE ÇERÇEVE OLUŞTUR (GAN için gerekli)
+    # Kare koordinatları (Model girişi için)
     rect = cv2.boundingRect(hull) # (x, y, w, h)
     
     return mask, rect
@@ -113,7 +94,7 @@ def tensor_to_cv2(tensor):
     image = image.clamp(0, 1)
     image = image.permute(1, 2, 0).numpy()
     image = (image * 255).astype(np.uint8)
-    return image # RGB Formatında döner
+    return image # RGB
 
 # --- ANA İŞLEM ---
 
@@ -123,31 +104,27 @@ async def analyze_photo(
     target_mode: str = Form("age_estimation") 
 ):
     try:
-        # 1. Dosya Okuma
         contents = await file.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         img_np = np.array(pil_image) # RGB
         
-        # 2. Yüz Maskesi ve Koordinatları Al
         mask, rect = get_face_mask_and_bbox(img_np)
-        
         final_output = img_np.copy()
         
         if rect:
             (x, y, w, h) = rect
             
-            # --- Padding (Biraz genişletelim) ---
-            p = int(w * 0.15) 
+            # Padding (Biraz pay bırak)
+            p = int(w * 0.15)
             x1 = max(0, x - p)
-            y1 = max(0, y - int(p*1.5)) # Alın kısmı için ekstra pay
+            y1 = max(0, y - int(p*1.5))
             x2 = min(img_np.shape[1], x + w + p)
             y2 = min(img_np.shape[0], y + h + p)
             
             face_roi = img_np[y1:y2, x1:x2]
             
-            # 3. Modelleri Çalıştır
+            # Modele Hazırlık
             face_pil = Image.fromarray(face_roi)
-            # Modele girerken en kaliteli küçültme
             face_input = face_pil.resize((128, 128), Image.Resampling.LANCZOS)
             
             transform = transforms.Compose([
@@ -165,11 +142,10 @@ async def analyze_photo(
                 result["type"] = "prediction"
                 result["age"] = round(age, 1)
                 
-                # Sadece tahminde kare çizelim (Artık çok daha doğru yerde olacak)
-                cv2.rectangle(final_output, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                # Tahminde kare çizmiyoruz, temiz kalsın.
 
             else:
-                # --- PROFESYONEL MONTAJ (SEAMLESS BLENDING) ---
+                # --- YAŞLANDIRMA (Filtresiz Saf Montaj) ---
                 target_label = 1.0 if target_mode == "make_old" else 0.0
                 label_tensor = torch.tensor([target_label]).to(DEVICE)
                 
@@ -178,33 +154,21 @@ async def analyze_photo(
                 
                 gen_face = tensor_to_cv2(fake_tensor) # 128x128
                 
-                # --- KALİTE ARTIRMA BÖLÜMÜ ---
-                # 1. 128px'lik çıktıyı büyütmeden önce biraz iyileştir
-                gen_face = enhance_image(gen_face)
-
-                # 2. Orijinal boyuta büyütürken LANCZOS4 kullan (En kaliteli algoritma)
+                # A) Büyüt (Standart Lanczos ile, ekstra keskinleştirme yok)
                 gen_face_resized = cv2.resize(gen_face, (x2-x1, y2-y1), interpolation=cv2.INTER_LANCZOS4)
                 
-                # 3. Büyüttükten sonra tekrar hafif bir netleştirme
-                gen_face_resized = cv2.detailEnhance(gen_face_resized, sigma_s=5, sigma_r=0.1)
-
-                # --- MONTAJ ---
-                # A) Maskeyi kesip hazırla (Yumuşak geçiş için blurla)
+                # B) Maskeyi Hazırla (Yumuşak kenar için blur şart)
                 mask_roi = mask[y1:y2, x1:x2]
                 mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 10)
                 
-                # B) Alfa Karışımı (Alpha Blending)
+                # C) Montaj (Alpha Blending)
                 roi_bg = final_output[y1:y2, x1:x2].astype(float)
                 roi_fg = gen_face_resized.astype(float)
                 
-                # Maskeyi 0-1 arasına çek ve 3 kanallı yap
                 alpha = mask_roi.astype(float) / 255.0
                 alpha = np.stack([alpha]*3, axis=-1)
                 
-                # Formül: (Yeni * Maske) + (Eski * (1-Maske))
-                # Bu sayede sadece yüz değişir, arka plan ve saç kenarları orijinal kalır.
                 blended = (roi_fg * alpha) + (roi_bg * (1.0 - alpha))
-                
                 final_output[y1:y2, x1:x2] = blended.astype(np.uint8)
                 
                 result["type"] = "transformation"
@@ -212,8 +176,7 @@ async def analyze_photo(
             result = {"type": "error", "age": 0}
             print("⚠️ Yüz bulunamadı.")
 
-        # 4. Kaydet
-        # OpenCV BGR kaydeder, elimizdeki RGB. Dönüştür:
+        # Kaydet
         final_output_bgr = cv2.cvtColor(final_output, cv2.COLOR_RGB2BGR)
         out_filename = f"result_{uuid.uuid4().hex[:8]}.jpg"
         save_path = os.path.join(UPLOAD_DIRECTORY, out_filename)

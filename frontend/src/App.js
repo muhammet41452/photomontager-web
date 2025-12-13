@@ -50,7 +50,7 @@ function App() {
       } else {
         // URL Düzeltme
         let fullImageUrl = data.image_url;
-        if (!fullImageUrl.startsWith('http')) {
+        if (!fullImageUrl.startsWith('https')) {
             fullImageUrl = `${BACKEND_URL}${data.image_url}`;
         }
 

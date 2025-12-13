@@ -9,7 +9,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
-  // SİZİN RENDER ADRESİNİZ
+  // SİZİN RENDER ADRESİNİZs
   const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space";
 
   // --- DOSYA SEÇME ---

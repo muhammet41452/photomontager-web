@@ -9,7 +9,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
-  // SİZİN RENDER ADRESİNİZs
+  // ✅ 1. ADRESİN HTTPS OLDUĞUNDAN EMİN OLALIM
   const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space";
 
   // --- DOSYA SEÇME ---
@@ -38,6 +38,7 @@ function App() {
     formData.append('target_mode', mode);
 
     try {
+      // ✅ 2. FETCH İSTEĞİNİN HTTPS GİTTİĞİNDEN EMİN OL
       const response = await fetch(`${BACKEND_URL}/predict/`, {
         method: 'POST',
         body: formData,
@@ -48,11 +49,19 @@ function App() {
       if (data.error) {
         setStatus('Hata: ' + data.error);
       } else {
-        // URL Düzeltme
+        
+        // ✅ 3. RESİM URL'SİNİ DÜZELTME (KRİTİK BÖLÜM)
         let fullImageUrl = data.image_url;
-        if (!fullImageUrl.startsWith('https')) {
-            fullImageUrl = `${BACKEND_URL}${data.image_url}`;
+
+        // Eğer gelen link "http://" ile başlıyorsa, onu zorla "https://" yap (Mixed Content Çözümü)
+        if (fullImageUrl.startsWith('http://')) {
+            fullImageUrl = fullImageUrl.replace('http://', 'https://');
         }
+        // Eğer gelen link sadece "/static/..." gibi bir yol ise, başına site adresini ekle
+        else if (fullImageUrl.startsWith('/')) {
+            fullImageUrl = `${BACKEND_URL}${fullImageUrl}`;
+        }
+        // Eğer zaten https ise dokunma.
 
         if (data.type === 'prediction') {
           setResultAge(data.age);
@@ -65,29 +74,26 @@ function App() {
       }
     } catch (error) {
       console.error(error);
-      setStatus('Sunucuya bağlanılamadı.');
+      setStatus('Sunucuya bağlanılamadı. (HTTPS hatası olabilir)');
     }
     setLoading(false);
   };
 
-  // --- DÜZELTİLDİ: İndirme Fonksiyonu (Blob Yöntemi) ---
+  // --- İndirme Fonksiyonu ---
   const handleDownload = async () => {
     if (resultImage) {
       try {
         setStatus('İndiriliyor...');
-        // Resmi veri olarak çek
         const response = await fetch(resultImage);
         const blob = await response.blob();
         
-        // Geçici bir indirme bağlantısı oluştur
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `sonuc_${Date.now()}.jpg`; // Dosya ismini ayarla
+        link.download = `sonuc_${Date.now()}.jpg`;
         document.body.appendChild(link);
-        link.click(); // Otomatik tıkla
+        link.click(); 
         
-        // Temizlik
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
         setStatus('İndirme tamamlandı.');
@@ -166,7 +172,6 @@ function App() {
                 <button onClick={handleDownload} className="action-btn download-btn">
                   ⬇️ İndir
                 </button>
-                {/* DÜZELTİLDİ: Unicode karakteri */}
                 <button onClick={handleSetAsOriginal} className="action-btn reuse-btn">
                   ↩ Bu Resmi Kullan
                 </button>

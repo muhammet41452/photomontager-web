@@ -39,7 +39,7 @@ function App() {
 
     try {
       // ✅ 2. FETCH İSTEĞİNİN HTTPS GİTTİĞİNDEN EMİN OL
-      const response = await fetch(`${BACKEND_URL}/predict/`, {
+      const response = await fetch(`${BACKEND_URL}/predict`, {
         method: 'POST',
         body: formData,
       });

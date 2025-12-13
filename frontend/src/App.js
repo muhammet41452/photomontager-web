@@ -10,7 +10,7 @@ function App() {
   const [status, setStatus] = useState('');
 
   // SİZİN RENDER ADRESİNİZ
-  const BACKEND_URL = "https://photomontager-web.onrender.com";
+  const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space";
 
   // --- DOSYA SEÇME ---
   const handleFileChange = (event) => {

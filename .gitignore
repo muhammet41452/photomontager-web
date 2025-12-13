@@ -1,13 +1,29 @@
-# Python
-backend/venv/
-backend/__pycache__/
-*.pyc
-
-# Modeller (Çok büyükse GitHub hata verir, şimdilik dursun ama uyarı alabiliriz)
-# backend/models/*.pth
-
-# React
-frontend/node_modules/
-frontend/build/
+# --- SİSTEM DOSYALARI (Windows & Mac Çöpleri) ---
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- FRONTEND (React/Node.js için ÇOK ÖNEMLİ) ---
+node_modules/
+build/
+dist/
+.env
+.env.local
+npm-debug.log
+yarn-error.log
+
+# --- BACKEND (Python Yedek Önlemler) ---
+__pycache__/
+*.pyc
+venv/
+env/
+.pytest_cache/
+
+# --- DATASET (Çift Dikiş - Garanti Olsun) ---
+# Backend içindeki dataset'i ana klasörden de engelleyelim
 backend/datasets/
+datasets/
+
+# --- IDE AYARLARI (VS Code vb.) ---
+.vscode/
+.idea/

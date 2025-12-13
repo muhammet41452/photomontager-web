@@ -10,7 +10,7 @@ function App() {
   const [status, setStatus] = useState('');
 
   // SİZİN RENDER ADRESİNİZs
-  const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space/predict";
+  const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space";
 
   // --- DOSYA SEÇME ---
   const handleFileChange = (event) => {

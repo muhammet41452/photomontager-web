@@ -10,7 +10,7 @@ function App() {
   const [status, setStatus] = useState('');
 
   // SİZİN RENDER ADRESİNİZs
-  const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space";
+  const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space/predict";
 
   // --- DOSYA SEÇME ---
   const handleFileChange = (event) => {
@@ -38,7 +38,7 @@ function App() {
     formData.append('target_mode', mode);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/analyze/`, {
+      const response = await fetch(`${BACKEND_URL}/predict/`, {
         method: 'POST',
         body: formData,
       });

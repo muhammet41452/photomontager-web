@@ -9,10 +9,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
-  // ✅ 1. Backend Adresi (HTTPS olduğundan emin ol)
+  // 🌍 Backend Adresini Kendi Space Adresinle Değiştir
   const BACKEND_URL = "https://muho4145-photomontager-backend.hf.space";
 
-  // --- DOSYA SEÇME ---
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -24,12 +23,11 @@ function App() {
     }
   };
 
-  // --- İŞLEME FONKSİYONU ---
   const handleProcess = async (mode) => {
     if (!selectedFile) return;
     
     setLoading(true);
-    setStatus('Yapay Zeka İşliyor... (1-2 dk sürebilir)');
+    setStatus('Yapay Zeka İşliyor... Lütfen Bekleyin...');
     setResultImage(null);
     setResultAge(null);
 
@@ -38,14 +36,20 @@ function App() {
     formData.append('target_mode', mode);
 
     try {
-      // ✅ 2. İstek Gönder (Sondaki '/' işaretini kaldırdık)
       const response = await fetch(`${BACKEND_URL}/predict`, { 
         method: 'POST',
         body: formData,
       });
 
       const data = await response.json();
-      console.log("Sunucu Cevabı:", data); // Konsola bakarsan veriyi göreceksin
+      console.log("Sunucu Cevabı:", data);
+
+      // 🔥 KORUMA: Eğer veri NULL gelirse hata ver ama çökme
+      if (!data) {
+         setStatus("Hata: Sunucudan boş cevap geldi. Tekrar deneyin.");
+         setLoading(false);
+         return;
+      }
 
       // Hata Kontrolü
       if (data.error || data.detail) {
@@ -54,16 +58,14 @@ function App() {
         return;
       }
 
-      // Resim URL Kontrolü
       if (!data.image_url) {
-        setStatus('Hata: Sunucu resim adresi göndermedi.');
+        setStatus('Hata: Sunucu resim oluşturamadı.');
         setLoading(false);
         return;
       }
 
-      // ✅ 3. URL Düzeltme (HTTPS Zorlaması)
+      // URL Düzeltme
       let fullImageUrl = data.image_url;
-
       if (fullImageUrl.startsWith('http://')) {
           fullImageUrl = fullImageUrl.replace('http://', 'https://');
       }
@@ -71,9 +73,8 @@ function App() {
           fullImageUrl = `${BACKEND_URL}${fullImageUrl}`;
       }
 
-      // ✅ 4. KRİTİK DÜZELTME: 'age' yerine 'predicted_age' kullanıyoruz!
       if (data.type === 'prediction') {
-        setResultAge(data.predicted_age); // Düzelttiğimiz yer burası
+        setResultAge(data.predicted_age);
         setResultImage(fullImageUrl);
         setStatus(`Tahmin Edilen Yaş: ${data.predicted_age}`);
       } else {
@@ -83,26 +84,23 @@ function App() {
 
     } catch (error) {
       console.error("Bağlantı Hatası:", error);
-      setStatus('Hata: Sunucuya bağlanılamadı. Konsolu (F12) kontrol edin.');
+      setStatus('Hata: Sunucuya bağlanılamadı. İnternetinizi kontrol edin.');
     }
     setLoading(false);
   };
 
-  // --- İndirme Fonksiyonu ---
   const handleDownload = async () => {
     if (resultImage) {
       try {
         setStatus('İndiriliyor...');
         const response = await fetch(resultImage);
         const blob = await response.blob();
-        
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `sonuc_${Date.now()}.jpg`;
         document.body.appendChild(link);
         link.click(); 
-        
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
         setStatus('İndirme tamamlandı.');
@@ -113,10 +111,8 @@ function App() {
     }
   };
 
-  // --- Resmi Orijinal Yapma ---
   const handleSetAsOriginal = async () => {
     if (!resultImage) return;
-
     try {
       setStatus('Resim aktarılıyor...');
       const response = await fetch(resultImage);
@@ -128,9 +124,7 @@ function App() {
       setResultImage(null);
       setResultAge(null);
       setStatus('İşlenmiş fotoğraf yeni orijinal olarak ayarlandı.');
-
     } catch (error) {
-      console.error("Dönüştürme hatası:", error);
       setStatus("Resim aktarılırken hata oluştu.");
     }
   };
@@ -146,13 +140,10 @@ function App() {
         </div>
 
         <div className="main-content">
-          
-          {/* SOL KUTU (Orijinal) */}
           {previewUrl && (
             <div className="image-box">
               <h3>Orijinal</h3>
               <img src={previewUrl} alt="Orijinal" className="img-display" />
-              
               <div className="button-group">
                 <button onClick={() => handleProcess('age_estimation')} disabled={loading} className="action-btn predict-btn">
                   🔍 Yaşı Tahmin Et
@@ -167,13 +158,11 @@ function App() {
             </div>
           )}
 
-          {/* SAĞ KUTU (Sonuç) */}
           {resultImage && (
             <div className="image-box result-box">
               <h3>Sonuç</h3>
               <img key={resultImage} src={resultImage} alt="Sonuç" className="img-display" />
               
-              {/* YAŞ SONUCU GÖSTERGESİ */}
               {resultAge !== null && (
                 <div className="age-result">{resultAge} <span style={{fontSize:'1rem'}}>YAŞ</span></div>
               )}
@@ -189,7 +178,6 @@ function App() {
             </div>
           )}
         </div>
-
         <p className="status-text">{status}</p>
       </header>
     </div>
